@@ -7,11 +7,6 @@
 
 ### Downloads or Social Links
 * [Download](#)
-* [Meetup](#)
 
 ### Code Repository
-* [repo](#)
-
-### Change Log
-* [changes](#)
-
+* [rep](https://github.com/OWASP/www-project-lets-threat-model)
