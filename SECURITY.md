@@ -15,7 +15,7 @@ If you believe you have found a security vulnerability in this project, please r
 ### How to Report
 
 - **Email**: [jesuscmartinez@pm.me](mailto:jesuscmartinez@pm.me)
-- **GitHub Security Advisories**: [Create a security advisory](https://github.com/jesuscmartinez/lets-threat-model-core/security/advisories)
+- **GitHub Security Advisories**: [Create a security advisory](https://github.com/OWASP/www-project-lets-threat-model/security/advisories)
 
 Please include as much detail as possible to help identify and fix the issue quickly. This may include:
 
