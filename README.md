@@ -28,7 +28,7 @@ The easiest way to start is by using the pre-built Docker image.
 docker run --rm -it \
   -v "$(pwd)":/data \
   --env-file .env \
-  ghcr.io/jesuscmartinez/lets-threat-model-core:latest \
+  ghcr.io/owasp/www-project-lets-threat-model:latest \
   --config-file /data/config.yaml
 ```
 
@@ -38,7 +38,7 @@ docker run --rm -it \
   -v "$(pwd)":/data \
   -v /path/to/your/local/repo:/repos/my-local-repo \
   --env-file .env \
-  ghcr.io/jesuscmartinez/lets-threat-model-core:latest \
+  ghcr.io/owasp/www-project-lets-threat-model:latest \
   --config-file /data/config.yaml
 ```
 
@@ -57,7 +57,7 @@ asset:
 
 repositories:
   - name: "Sample Repo"
-    url: "github.com/jesuscmartinez/lets-threat-model-core"
+    url: "github.com/OWASP/www-project-lets-threat-model"
 
 config:
   llm_provider: "openai"
@@ -93,8 +93,8 @@ After running the container, reports will be generated only if you specify the c
 ## 🚀 Installation
 ### **1. Clone the Repository**
 ```sh
- git clone https://github.com/jesuscmartinez/lets-threat-model-core
- cd lets-threat-model-core
+ git clone https://github.com/OWASP/www-project-lets-threat-model
+ cd www-project-lets-threat-model
 ```
 
 ### **2. Install Dependencies**
@@ -119,7 +119,7 @@ asset:
 repositories:
   # Example 1: Remote repository (use 'url' only)
   - name: "Lets Threat Model Core"
-    url: "github.com/jesuscmartinez/lets-threat-model-core"
+    url: "github.com/OWASP/www-project-lets-threat-model"
     # Do NOT specify local_path when using a remote URL
 
   # # Example 2: Local repository (use 'local_path' only)

@@ -170,7 +170,7 @@ def generate_sarif_log_with_om(threat_model: ThreatModel) -> SarifLog:
     tool = Tool(
         driver=ToolComponent(
             name="Lets Threat Model",
-            information_uri="https://github.com/jesuscmartinez/lets-threat-model-core",
+            information_uri="https://github.com/OWASP/www-project-lets-threat-model",
             rules=rules,
         )
     )
