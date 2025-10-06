@@ -1,0 +1,18 @@
+audience:
+  - builder
+leaders:
+  - name: Jesus Martinez
+    email: jesuscmartinez@owasp.org
+level: 2
+name: OWASP Lets Threat Model
+pitch: A very brief, one-line description of your project
+repositories:
+  - name: www-project-lets-threat-model
+    url: https://github.com/OWASP/www-project-lets-threat-model
+    description: OWASP Foundation web repository
+tags:
+  - example-tag
+  - custom-tag-1
+  - custom-tag-2
+type: code
+website: https://owasp.org/www-project-lets-threat-model
