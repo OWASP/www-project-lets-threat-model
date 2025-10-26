@@ -27,7 +27,7 @@ jobs:
     steps:
       # Step 1: Checkout code
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Step 2: Set up Python
       - name: Set up Python
