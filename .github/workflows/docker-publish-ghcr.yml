@@ -36,4 +36,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/owasp/lets-threat-model:latest
-            ghcr.io/owasp/lets-threat-model:${{ github.sha }}ß
+            ghcr.io/owasp/lets-threat-model:${{ github.sha }}
