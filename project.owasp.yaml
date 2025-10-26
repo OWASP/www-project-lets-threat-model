@@ -5,14 +5,14 @@ leaders:
     email: jesuscmartinez@owasp.org
 level: 2
 name: OWASP Lets Threat Model
-pitch: A very brief, one-line description of your project
+pitch: Let's Threat Model is an Agentic AI tool that helps teams identify and manage threats early in the development lifecycle.
 repositories:
   - name: www-project-lets-threat-model
     url: https://github.com/OWASP/www-project-lets-threat-model
     description: OWASP Foundation web repository
 tags:
-  - example-tag
-  - custom-tag-1
-  - custom-tag-2
+  - ai
+  - threat-modeling
+  - security
 type: code
 website: https://owasp.org/www-project-lets-threat-model
