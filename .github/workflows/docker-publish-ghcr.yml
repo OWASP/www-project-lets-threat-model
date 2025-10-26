@@ -16,32 +16,24 @@ jobs:
 
     steps:
       - name: Checkout repository
-        # PINNED: replace the placeholder below with the full commit SHA of the actions/checkout repo
-        # Example: uses: actions/checkout@c2f7f8b8e0f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4
-        uses: actions/checkout@<ACTIONS_CHECKOUT_COMMIT_SHA>
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
-        # PINNED: replace the placeholder below with the full commit SHA of the docker/setup-buildx-action repo
-        # Example: uses: docker/setup-buildx-action@3a6b1f4d5e6c7b8a9d0e1f2a3b4c5d6e7f8g9h0
-        uses: docker/setup-buildx-action@<SETUP_BUILDX_COMMIT_SHA>
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        # PINNED: replace the placeholder below with the full commit SHA of the docker/login-action repo
-        # Example: uses: docker/login-action@a1b2c3d4e5f67890abcdef1234567890abcdef12
-        uses: docker/login-action@<DOCKER_LOGIN_ACTION_COMMIT_SHA>
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push to GHCR with Repo Name
-        # PINNED: replace the placeholder below with the full commit SHA of the docker/build-push-action repo
-        # Example: uses: docker/build-push-action@4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b
-        uses: docker/build-push-action@<DOCKER_BUILD_PUSH_ACTION_COMMIT_SHA>
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/owasp/lets-threat-model:latest
-            ghcr.io/owasp/lets-threat-model:${{ github.sha }}
+            ghcr.io/owasp/lets-threat-model:${{ github.sha }}ß
