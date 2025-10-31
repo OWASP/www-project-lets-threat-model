@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import json
 import logging
 import os
 from uuid import UUID, uuid4
@@ -9,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import SecretStr
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, Dict, Any
 from sarif_om import SarifLog
 
 # Import Models and Services
@@ -39,6 +38,36 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _masked_secret(secret: SecretStr) -> str:
+    """
+    Return a masked representation of a secret suitable for logging.
+    """
+    if not isinstance(secret, SecretStr):
+        return "<redacted>"
+    raw = secret.get_secret_value()
+    if not raw:
+        return ""
+    if len(raw) <= 4:
+        return "*" * len(raw)
+    return f"{raw[:2]}{'*' * (len(raw) - 4)}{raw[-2:]}"
+
+
+def _mask_threat_model_config(config: "ThreatModelConfig") -> Dict[str, Any]:
+    """
+    Produce a logging-safe representation of ThreatModelConfig with secrets masked.
+    """
+    config_dict = config.model_dump(mode="json")
+    for field in ("pat", "api_key"):
+        if field in config_dict:
+            secret = getattr(config, field, None)
+            config_dict[field] = (
+                _masked_secret(secret)
+                if isinstance(secret, SecretStr)
+                else "<redacted>"
+            )
+    return config_dict
 
 
 def load_yaml_config(file_path: str) -> dict:
@@ -181,10 +210,13 @@ async def main(
             asset, repositories, threat_model_config
         )
 
-        logger.debug(
-            f"⚙️ Threat Model Configuration:\n{threat_model_config.model_dump_json(indent=4)}"
-            f"\n\n📝 Generated Threat Model:\n{threat_model.model_dump_json(indent=4)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            masked_config = _mask_threat_model_config(threat_model_config)
+            logger.debug(
+                "⚙️ Threat Model Configuration:\n%s\n\n📝 Generated Threat Model:\n%s",
+                json.dumps(masked_config, indent=4),
+                threat_model.model_dump_json(indent=4),
+            )
 
         # Generate and save the report
         markdown_report = generate_threat_model_report(

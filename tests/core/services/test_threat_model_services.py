@@ -118,7 +118,7 @@ class DummyRepo:
 def test_clone_repository_success(tmp_path, monkeypatch):
     username = "user"
     pat = SecretStr("token")
-    repo_url = "example.com/repo.git"
+    repo_url = "github.com/org/repo.git"
     temp_dir = str(tmp_path / "repo_dir")
 
     captured = {}
@@ -136,15 +136,49 @@ def test_clone_repository_success(tmp_path, monkeypatch):
     assert isinstance(repo, DummyRepo)
 
     # Make sure the URL was built correctly
-    expected = f"https://{username}:{pat.get_secret_value()}@{repo_url}"
+    expected = (
+        f"https://{username}:{pat.get_secret_value()}@github.com/org/repo.git"
+    )
     assert captured["auth_url"] == expected
+    assert captured["directory"] == temp_dir
+
+
+def test_clone_repository_rejects_unapproved_host(tmp_path):
+    username = "user"
+    pat = SecretStr("token")
+    repo_url = "malicious.example.com/repo.git"
+
+    with pytest.raises(ValueError) as excinfo:
+        clone_repository(username, pat, repo_url, str(tmp_path / "repo"))
+
+    assert "not allowed" in str(excinfo.value)
+
+
+def test_clone_repository_supports_ssh(tmp_path, monkeypatch):
+    username = "user"
+    pat = SecretStr("token")
+    repo_url = "git@github.com:org/repo.git"
+    temp_dir = str(tmp_path / "repo_dir")
+
+    captured = {}
+
+    def fake_clone_from(auth_url, directory):
+        captured["auth_url"] = auth_url
+        captured["directory"] = directory
+        return DummyRepo()
+
+    monkeypatch.setattr(GitRepo, "clone_from", fake_clone_from)
+
+    clone_repository(username, pat, repo_url, temp_dir)
+
+    assert captured["auth_url"] == repo_url
     assert captured["directory"] == temp_dir
 
 
 def test_clone_repository_failure(monkeypatch):
     username = "user"
     pat = SecretStr("token")
-    repo_url = "example.com/repo.git"
+    repo_url = "github.com/org/repo.git"
     temp_dir = "/invalid/path"
 
     def fake_clone(auth_url, directory):

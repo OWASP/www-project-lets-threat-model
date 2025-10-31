@@ -13,6 +13,7 @@ from main import (
     load_yaml_config,
     parse_repositories,
     main,
+    _mask_threat_model_config,
 )
 from tests.conftest import tm_config, asset, repository
 
@@ -158,6 +159,19 @@ def test_build_threat_model_config(config_data, monkeypatch):
 
     # Assert that the config has the expected default values
     assert config.llm_provider == config_data["llm_provider"]
+
+
+def test_mask_threat_model_config_masks_secrets(tm_config):
+    """Ensure that sensitive fields are masked before logging."""
+    masked = _mask_threat_model_config(tm_config)
+
+    assert masked["pat"] != tm_config.pat.get_secret_value()
+    assert masked["api_key"] != tm_config.api_key.get_secret_value()
+    assert "*" in masked["pat"]
+    assert "*" in masked["api_key"]
+    assert tm_config.pat.get_secret_value() not in masked["pat"]
+    assert tm_config.api_key.get_secret_value() not in masked["api_key"]
+    assert masked["llm_provider"] == tm_config.llm_provider
 
 
 async def test_main(tmp_path, config_data, monkeypatch):
