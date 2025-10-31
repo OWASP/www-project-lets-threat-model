@@ -12,6 +12,8 @@ from tenacity import (
 from langchain_core.runnables.base import Runnable
 from langchain_core.runnables.utils import Input
 
+from core.utils.llm_concurrency import llm_concurrency_guard
+
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +231,8 @@ async def ainvoke_with_retry(chain: Runnable, input: Input):
     # inputs = {k: json.dumps(v) for k, v in inputs.items()}  # Uncomment if your inputs need serialization
 
     logger.debug(f"Invoking chain with inputs: {input}")
-    return await chain.ainvoke(input)
+    async with llm_concurrency_guard():
+        return await chain.ainvoke(input)
 
 
 @retry(

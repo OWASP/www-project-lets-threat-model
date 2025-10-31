@@ -49,6 +49,8 @@ class AttackGraphStateModel(BaseModel):
 
 
 class Result(BaseModel):
+    """LLM tool schema describing MITRE ATT&CK techniques discovered for a component."""
+
     attacks: List[AgentAttack] = Field(
         default_factory=list,
         description="List of identified attacks based on the MITRE ATT&CK framework.",

@@ -24,6 +24,8 @@ from core.services.sarif_services import (
 from core.services.threat_model_config import ThreatModelConfig
 from core.services.threat_model_services import generate_threat_model
 from core.services.reports import generate_threat_model_report
+from core.utils.llm_concurrency import set_concurrency_limit
+from core.agents.chat_model_manager import set_provider_limits
 
 
 # Get LOG_LEVEL from env or default to INFO
@@ -117,6 +119,19 @@ def build_threat_model_config(
         "generate_threats": True,
         "generate_data_flow_reports": True,
         "data_flow_report_strategy": ThreatModelConfig.STRATEGY_BOTH,
+        "anthropic_concurrency_limit": 2,
+        "anthropic_requests_per_minute": 50.0,
+        "anthropic_check_every_n_seconds": 0.5,
+        "anthropic_max_bucket_size": 5,
+        "anthropic_per_request_token_cap": 10000,
+        "anthropic_model_token_caps": {
+            "default": 10000,
+            "claude-4.1-sonnet": 8000,
+            "claude-4.1-opus": 8000,
+            "claude-3-5-sonnet": 8000,
+            "claude-3-sonnet": 8000,
+            "claude-3-5-opus": 8000,
+        },
     }
 
     # Fill in any missing keys with defaults
@@ -133,6 +148,15 @@ def build_threat_model_config(
 
     config = ThreatModelConfig(**config_settings)
     config.add_exclude_patterns(exclude_patterns)
+    set_provider_limits(
+        "anthropic",
+        requests_per_minute=config.anthropic_requests_per_minute,
+        check_every_n_seconds=config.anthropic_check_every_n_seconds,
+        max_bucket_size=config.anthropic_max_bucket_size,
+        max_tokens=config.anthropic_per_request_token_cap,
+        model_caps=config.anthropic_model_token_caps,
+    )
+    set_concurrency_limit(config.anthropic_concurrency_limit)
     return config
 
 
