@@ -86,6 +86,7 @@ class MergeDataFlowAgent:
 
         # Pydantic model for LLM results
         class Result(BaseModel):
+            """Structured response combining merged data flow report and justification."""
 
             data_flow_report: Dict[str, Any] = Field(
                 ...,

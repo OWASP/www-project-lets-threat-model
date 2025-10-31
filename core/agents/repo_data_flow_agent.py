@@ -331,6 +331,8 @@ class DataFlowAgent:
 
         # We'll parse the LLM output into these fields
         class CategorizationResult(BaseModel):
+            """Structured categorization results returned by the LLM tool."""
+
             should_review: List[File]
             could_review: List[File]
             should_not_review: List[File]

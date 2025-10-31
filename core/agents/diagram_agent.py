@@ -47,6 +47,8 @@ class DiagramAgent:
 
         # Pydantic model for LLM results
         class Result(BaseModel):
+            """Tool output capturing the Mermaid diagram produced by the LLM."""
+
             mermaid_diagram: str = Field(
                 ...,
                 description="A Mermaid.js-compatible diagram that visualizes the data flow in the system.",

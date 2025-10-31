@@ -139,6 +139,7 @@ async def generate_mitre_attack(
                 provider=config.llm_provider,
                 api_key=config.api_key,
                 model=config.threat_model_agent_llm,
+                max_output_tokens=config.max_output_tokens,
             )
         )
 
@@ -268,11 +269,13 @@ def create_data_flow_agent(
             provider=config.llm_provider,
             api_key=config.api_key,
             model=config.categorization_agent_llm,
+            max_output_tokens=config.max_output_tokens,
         ),
         review_model=ChatModelManager.get_model(
             provider=config.llm_provider,
             api_key=config.api_key,
             model=config.report_agent_llm,
+            max_output_tokens=config.max_output_tokens,
         ),
         directory=directory,
         username=config.username,
@@ -290,6 +293,7 @@ def generate_dataflow_diagram(
             provider=config.llm_provider,
             api_key=config.api_key,
             model=config.report_agent_llm,
+            max_output_tokens=config.max_output_tokens,
         )
     )
 
@@ -337,6 +341,7 @@ async def generate_threats(
                 provider=config.llm_provider,
                 api_key=config.api_key,
                 model=config.threat_model_agent_llm,
+                max_output_tokens=config.max_output_tokens,
             )
         )
 
@@ -386,6 +391,7 @@ async def generate_threat_model_data(
                 provider=config.llm_provider,
                 api_key=config.api_key,
                 model=config.report_agent_llm,
+                max_output_tokens=config.max_output_tokens,
             )
         )
 
@@ -419,6 +425,7 @@ async def merge_data_flows(
                 provider=config.llm_provider,
                 api_key=config.api_key,
                 model=config.report_agent_llm,
+                max_output_tokens=config.max_output_tokens,
             )
         )
 

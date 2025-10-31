@@ -65,8 +65,8 @@ def test_create_data_flow_agent(monkeypatch, repository, tm_config, tmp_path):
     rev_model = object()
     calls = []
 
-    def fake_get_model(provider, api_key, model):
-        calls.append((provider, api_key, model))
+    def fake_get_model(provider, api_key, model, **kwargs):
+        calls.append((provider, api_key, model, kwargs))
         if model == tm_config.categorization_agent_llm:
             return cat_model
         elif model == tm_config.report_agent_llm:
@@ -89,8 +89,18 @@ def test_create_data_flow_agent(monkeypatch, repository, tm_config, tmp_path):
 
     # Ensure get_model was called for both categorization and review models
     assert calls == [
-        (tm_config.llm_provider, tm_config.api_key, tm_config.categorization_agent_llm),
-        (tm_config.llm_provider, tm_config.api_key, tm_config.report_agent_llm),
+        (
+            tm_config.llm_provider,
+            tm_config.api_key,
+            tm_config.categorization_agent_llm,
+            {"max_output_tokens": tm_config.max_output_tokens},
+        ),
+        (
+            tm_config.llm_provider,
+            tm_config.api_key,
+            tm_config.report_agent_llm,
+            {"max_output_tokens": tm_config.max_output_tokens},
+        ),
     ]
 
 
@@ -257,12 +267,13 @@ async def test_process_remote_repository_clone_failure(
 def stub_chat_model_get(monkeypatch, tm_config):
     # Capture calls to get_model and return a dummy model object
     dummy_model = object()
-    calls = {}
+    calls = {"kwargs": None}
 
-    def fake_get_model(provider, api_key, model):
+    def fake_get_model(provider, api_key, model, **kwargs):
         calls["provider"] = provider
         calls["api_key"] = api_key
         calls["model"] = model
+        calls["kwargs"] = kwargs
         return dummy_model
 
     monkeypatch.setattr(ChatModelManager, "get_model", fake_get_model)
@@ -305,6 +316,7 @@ def test_generate_dataflow_diagram_calls_and_returns(
         "provider": tm_config.llm_provider,
         "api_key": tm_config.api_key,
         "model": tm_config.report_agent_llm,
+        "kwargs": {"max_output_tokens": tm_config.max_output_tokens},
     }
 
 
@@ -456,7 +468,7 @@ async def test_merge_data_flows(monkeypatch, tm_config, make_df):
 
     # Stub ChatModelManager.get_model for MergeDataFlowAgent init
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Stub MergeDataFlowAgent to return a merged state
@@ -536,7 +548,7 @@ async def test_generate_mitre_attack_empty(
 ):
     # Stub model lookup
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy agent with no attacks
@@ -563,7 +575,7 @@ async def test_generate_mitre_attack_with_attack(
 ):
     # Stub model lookup
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy agent returning that attack
@@ -600,7 +612,7 @@ async def test_generate_threats_empty(
 ):
     # Stub out ChatModelManager.get_model
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy agent that returns no threats
@@ -630,7 +642,7 @@ async def test_generate_threats_with_items(
 ):
     # Stub out ChatModelManager.get_model
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy agent that returns one threat
@@ -668,7 +680,7 @@ async def test_generate_threat_model_data_defaults(
 ):
     # Stub LLM model lookup
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy ThreatModelDataAgent that returns empty dict
@@ -700,7 +712,7 @@ async def test_generate_threat_model_data_with_values(
 ):
     # Stub LLM model lookup
     monkeypatch.setattr(
-        ChatModelManager, "get_model", lambda provider, api_key, model: object()
+        ChatModelManager, "get_model", lambda provider, api_key, model, **kwargs: object()
     )
 
     # Dummy agent returning explicit values
