@@ -1,4 +1,21 @@
 repos:
+  - repo: https://github.com/jazzband/pip-tools
+    rev: 7.4.1
+    hooks:
+      - id: pip-compile
+        name: pip-compile (requirements)
+        files: ^requirements\.in$
+        args:
+          - requirements.in
+          - --output-file=requirements.txt
+          - --generate-hashes
+      - id: pip-compile
+        name: pip-compile (dev requirements)
+        files: ^requirements-dev\.in$
+        args:
+          - requirements-dev.in
+          - --output-file=requirements-dev.txt
+          - --generate-hashes
   - repo: local
     hooks:
       - id: run-pytest

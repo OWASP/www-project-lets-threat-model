@@ -100,7 +100,8 @@ After running the container, reports will be generated only if you specify the c
 ### **2. Install Dependencies**
 Ensure you have Python **3.8+** installed, then install dependencies:
 ```sh
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --require-hashes -r requirements-dev.txt
 ```
 
 ---
@@ -290,6 +291,7 @@ venv\Scripts\activate  # On Windows
 pip install -r requirements.txt
 ```
 
+> 📌 We manage dependency locks with [`pip-compile`](https://github.com/jazzband/pip-tools). Update `requirements*.in` and run `pip-compile --generate-hashes` (or simply commit after changing an `.in` file and let the pre-commit hook regenerate the hashed `.txt` files).
 ---
 
 ## 🏗 Contributing
