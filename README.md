@@ -28,7 +28,7 @@ The easiest way to start is by using the pre-built Docker image.
 docker run --rm -it \
   -v "$(pwd)":/data \
   --env-file .env \
-  ghcr.io/owasp/www-project-lets-threat-model:latest \
+  ghcr.io/owasp/lets-threat-model:latest \
   --config-file /data/config.yaml
 ```
 
@@ -38,7 +38,7 @@ docker run --rm -it \
   -v "$(pwd)":/data \
   -v /path/to/your/local/repo:/repos/my-local-repo \
   --env-file .env \
-  ghcr.io/owasp/www-project-lets-threat-model:latest \
+  ghcr.io/owasp/lets-threat-model:latest \
   --config-file /data/config.yaml
 ```
 
