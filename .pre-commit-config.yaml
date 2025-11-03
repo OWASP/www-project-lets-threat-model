@@ -9,6 +9,9 @@ repos:
           - requirements.in
           - --output-file=requirements.txt
           - --generate-hashes
+          - --allow-unsafe
+        additional_dependencies:
+          - "pip<25"
       - id: pip-compile
         name: pip-compile (dev requirements)
         files: ^requirements-dev\.in$
@@ -16,6 +19,10 @@ repos:
           - requirements-dev.in
           - --output-file=requirements-dev.txt
           - --generate-hashes
+          - --allow-unsafe
+        additional_dependencies:
+          - "pip<25"
+     
   - repo: local
     hooks:
       - id: run-pytest

@@ -37,6 +37,7 @@ def test_get_model_openai_standard(mock_constructors):
         top_p=0.9,
         frequency_penalty=0.1,
         presence_penalty=0.2,
+        max_output_tokens=2048,
     )
 
     mock_openai.assert_called_once()
@@ -84,6 +85,7 @@ def test_get_model_anthropic(mock_constructors):
         model="claude-3-5-sonnet",
         api_key=SecretStr("anthropic-key"),
         temperature=0.2,
+        max_output_tokens=9000,
     )
 
     mock_anthropic.assert_called_once()
