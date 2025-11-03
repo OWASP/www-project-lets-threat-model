@@ -1037,7 +1037,9 @@ torch==2.9.0 \
     --hash=sha256:eff527d4e4846e6f70d2afd8058b73825761203d66576a7e04ea2ecfebcb4ab8 \
     --hash=sha256:f8877779cf56d1ce431a7636703bdb13307f5960bb1af49716d8b179225e0e6a \
     --hash=sha256:f8ed31ddd7d10bfb3fbe0b9fe01b1243577f13d75e6f4a0839a283915ce3791e
-    # via sentence-transformers
+    # via
+    #   -r requirements-dev.in
+    #   sentence-transformers
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
     --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
