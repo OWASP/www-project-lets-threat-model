@@ -41,6 +41,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --require-hashes -r requirements.txt
           python -m pip install --require-hashes -r requirements-dev.txt
+
+      - name: Generate freeze snapshot
+        run: |
+          python -m pip freeze | sort > requirements-freeze.txt
+
+      - name: Verify freeze snapshot is committed
+        run: |
+          git diff --exit-code requirements-freeze.txt
           
 
       # Step 4: Run pytest (will use pytest.ini automatically)

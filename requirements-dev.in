@@ -1,9 +1,0 @@
-pytest==8.3.5
-pytest-asyncio==0.25.3
-pytest-mock==3.14.0
-pre-commit==4.2.0
-jsonschema==4.23.0
-sentence-transformers==5.0.0
-torch==2.9.0
-pip-tools==7.4.1
-setuptools==80.9.0
