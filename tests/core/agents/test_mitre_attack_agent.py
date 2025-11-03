@@ -1,26 +1,85 @@
-import re
+import json
 import uuid
 import pytest
-import asyncio
-from uuid import uuid4
 from core.agents.mitre_attack_agent import (
     MitreAttackAgent,
     AttackGraphStateModel,
     Result,
 )
-import core.agents.mitre_attack_agent as mitre_module
 from langchain_core.language_models.chat_models import BaseChatModel
 from core.models.dtos.MitreAttack import AgentAttack
+from langchain_core.runnables import Runnable
+
+
+def _extract_component(item) -> dict:
+    if isinstance(item, dict):
+        return item
+    text = item.to_string() if hasattr(item, "to_string") else str(item)
+    start = text.find("<component>")
+    end = text.find("</component>", start)
+    if start != -1 and end != -1:
+        snippet = text[start + len("<component>") : end].strip()
+        try:
+            data = json.loads(snippet)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
+class SuccessStructuredRunnable(Runnable):
+    def invoke(self, input, config=None):
+        return Result(
+            attacks=[
+                AgentAttack(
+                    component="success",
+                    component_uuid=uuid.uuid4(),
+                )
+            ]
+        )
+
+    async def ainvoke(self, input, config=None):
+        return self.invoke(input, config=config)
+
+    async def abatch(self, inputs, config=None, *args, **kwargs):
+        return_exceptions = kwargs.get("return_exceptions", False)
+        outputs = []
+        for item in inputs:
+            component_payload = _extract_component(item)
+            outputs.append(
+                Result(
+                    attacks=[
+                        AgentAttack(
+                            component=component_payload.get("name", ""),
+                            component_uuid=uuid.uuid4(),
+                        )
+                    ]
+                )
+            )
+        return outputs
+
+
+class FailingStructuredRunnable(Runnable):
+    def invoke(self, input, config=None):
+        raise RuntimeError("failure")
+
+    async def ainvoke(self, input, config=None):
+        raise RuntimeError("failure")
+
+    async def abatch(self, inputs, config=None, *args, **kwargs):
+        return_exceptions = kwargs.get("return_exceptions", False)
+        if return_exceptions:
+            return [RuntimeError("failure") for _ in inputs]
+        raise RuntimeError("failure")
 
 
 class DummyModel(BaseChatModel):
-    def with_structured_output(self, schema):
-        # Stub for chaining prompts; return self for simplicity
-        return self
+    def with_structured_output(self, schema, *args, **kwargs):
+        return SuccessStructuredRunnable()
 
     def bind_tools(self, tools, **kwargs):
-        # Stub for binding tools; return self for simplicity
-        return self
+        return SuccessStructuredRunnable()
 
     def __ror__(self, other):
         # Support the 'prompt | model' chaining operator
@@ -33,6 +92,76 @@ class DummyModel(BaseChatModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         # Return a dummy response structure
+        return {"generations": [], "llm_output": {}}
+
+
+class FailingModel(BaseChatModel):
+    def with_structured_output(self, schema, *args, **kwargs):
+        return FailingStructuredRunnable()
+
+    def bind_tools(self, tools, **kwargs):
+        return FailingStructuredRunnable()
+
+    def __ror__(self, other):
+        return self
+
+    @property
+    def _llm_type(self):
+        return "dummy"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        return {"generations": [], "llm_output": {}}
+
+
+class MixedStructuredRunnable(Runnable):
+    def __init__(self):
+        self._next_uuid = uuid.uuid4()
+
+    def invoke(self, input, config=None):
+        raise NotImplementedError
+
+    async def ainvoke(self, input, config=None):
+        raise NotImplementedError
+
+    async def abatch(self, inputs, config=None, *args, **kwargs):
+        return_exceptions = kwargs.get("return_exceptions", False)
+        outputs = []
+        for item in inputs:
+            component_payload = _extract_component(item)
+            if component_payload.get("name") == "good":
+                outputs.append(
+                    Result(
+                        attacks=[
+                            AgentAttack(
+                                component=component_payload.get("name", ""),
+                                component_uuid=uuid.uuid4(),
+                            )
+                        ]
+                    )
+                )
+            else:
+                if return_exceptions:
+                    outputs.append(RuntimeError("failure"))
+                else:
+                    raise RuntimeError("failure")
+        return outputs
+
+
+class MixedModel(BaseChatModel):
+    def with_structured_output(self, schema, *args, **kwargs):
+        return MixedStructuredRunnable()
+
+    def bind_tools(self, tools, **kwargs):
+        return MixedStructuredRunnable()
+
+    def __ror__(self, other):
+        return self
+
+    @property
+    def _llm_type(self):
+        return "dummy"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         return {"generations": [], "llm_output": {}}
 
 
@@ -67,56 +196,33 @@ def test_finalize_converts_ids(monkeypatch, agent):
     ]
 
 
-async def test_process_component_success(monkeypatch, agent):
-    component = {"name": "comp1"}
-    report = {}
-
-    # Stub ainvoke_with_retry to return a successful attack object
-    async def fake_ainvoke(chain, data):
-
-        resp = Result(
-            attacks=[
-                AgentAttack(
-                    component_uuid=uuid.UUID("16ad7dc6-05ec-442c-ae9a-488eebc79c13"),
-                    component="comp1",
-                    attack_tactic="Tactic",
-                    technique_id="T1234",
-                    technique_name="Some Technique",
-                    reason_for_relevance="Relevant for test",
-                    mitigation="Test mitigation",
-                    url="http://example.com",
-                    is_subtechnique=False,
-                    parent_id="",
-                    parent_name="",
-                )
+async def test_analyze_processes_components(agent):
+    state = AttackGraphStateModel(
+        data_flow_report={
+            "processes": [
+                {"name": "comp1"},
+                {"name": "comp2"},
             ]
-        )
-        return {"responses": [resp]}
+        }
+    )
 
-    monkeypatch.setattr(mitre_module, "ainvoke_with_retry", fake_ainvoke)
+    result_state = await agent.analyze(state)
 
-    attacks = await agent._process_component(component, report, chain=None)
-    assert isinstance(attacks, list)
-    assert len(attacks) == 1
-    assert attacks[0].attack_tactic == "Tactic"
-    assert attacks[0].technique_id == "T1234"
-    assert attacks[0].technique_name == "Some Technique"
+    assert len(result_state.attacks) == 2
+    assert {attack.component for attack in result_state.attacks} == {
+        "comp1",
+        "comp2",
+    }
 
 
-async def test_process_component_exception(monkeypatch, agent, caplog):
-    component = {"name": "comp2"}
-    report = {}
+async def test_analyze_handles_exceptions():
+    failing_agent = MitreAttackAgent(model=FailingModel())
+    state = AttackGraphStateModel(
+        data_flow_report={"processes": [{"name": "comp"}]}
+    )
 
-    # Stub ainvoke_with_retry to raise an exception
-    async def fake_ainvoke(chain, data):
-        raise ValueError("failure")
-
-    monkeypatch.setattr(mitre_module, "ainvoke_with_retry", fake_ainvoke)
-
-    attacks = await agent._process_component(component, report, chain=None)
-    assert attacks == []
-    # Verify that an error was logged
-    assert "Error analyzing component" in caplog.text
+    result_state = await failing_agent.analyze(state)
+    assert result_state.attacks == []
 
 
 async def test_analyze_with_none_report(agent):
@@ -140,50 +246,18 @@ def test_get_workflow(agent):
     assert workflow is not None
 
 
-async def test_analyze_integration_and_error(monkeypatch, agent: MitreAttackAgent):
-    # Prepare a report with two components under 'processes'
-    comp_good = {"name": "good"}
-    comp_bad = {"name": "bad"}
-    state = AttackGraphStateModel(data_flow_report={"processes": [comp_good, comp_bad]})
-    # Stub ID conversion helpers to be no-ops
-    monkeypatch.setattr(agent.agent_helper, "convert_uuids_to_ids", lambda x: x)
-    monkeypatch.setattr(agent.agent_helper, "convert_ids_to_uuids", lambda x: x)
-
-    # Stub _process_component: one returns attacks, one raises
-    async def proc(comp, report, chain):
-        if comp["name"] == "good":
-            return [
-                AgentAttack(
-                    component_uuid=uuid.UUID("16ad7dc6-05ec-442c-ae9a-488eebc79c13"),
-                    component="comp",
-                    attack_tactic="tac",
-                    technique_id="T1",
-                    technique_name="Name",
-                    reason_for_relevance="reason",
-                    mitigation="mit",
-                    url="u",
-                    is_subtechnique=False,
-                    parent_id="",
-                    parent_name="",
-                )
+async def test_analyze_integration_and_error():
+    mixed_agent = MitreAttackAgent(model=MixedModel())
+    state = AttackGraphStateModel(
+        data_flow_report={
+            "processes": [
+                {"name": "good"},
+                {"name": "bad"},
             ]
-        else:
-            raise RuntimeError("failure")
+        }
+    )
 
-    monkeypatch.setattr(agent, "_process_component", proc)
-    new_state = await agent.analyze(state)
-    # Only the successful 'good' component should be included
+    new_state = await mixed_agent.analyze(state)
     assert len(new_state.attacks) == 1
-    atk = new_state.attacks[0]
-    # Verify that all key fields are preserved
-    assert atk.component_uuid == uuid.UUID("16ad7dc6-05ec-442c-ae9a-488eebc79c13")
-    assert atk.component == "comp"
-    assert atk.attack_tactic == "tac"
-    assert atk.technique_id == "T1"
-    assert atk.technique_name == "Name"
-    assert atk.reason_for_relevance == "reason"
-    assert atk.mitigation == "mit"
-    assert atk.url == "u"
-    assert atk.is_subtechnique is False
-    assert atk.parent_id == ""
-    assert atk.parent_name == ""
+    attack = new_state.attacks[0]
+    assert attack.component == "good"

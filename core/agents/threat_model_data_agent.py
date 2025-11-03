@@ -11,24 +11,8 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     ChatPromptTemplate,
 )
-from core.agents.agent_tools import AgentHelper, ainvoke_with_retry
+from core.agents.agent_tools import AgentHelper
 from langgraph.graph import StateGraph, START, END
-from trustcall import create_extractor
-
-from pydantic import BaseModel, Field
-
-# LangChain / local imports
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.prompts import (
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-    ChatPromptTemplate,
-)
-from core.agents.agent_tools import AgentHelper, ainvoke_with_retry
-from langgraph.graph import StateGraph, START, END
-from trustcall import create_extractor
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -166,12 +150,10 @@ class ThreatModelDataAgent:
         )
         prompt = ChatPromptTemplate.from_messages([system_prompt, user_prompt])
 
-        # Build chain with structured output
-        chain = prompt | create_extractor(
-            self.model,
-            tools=[Result],
-            tool_choice="Result",
+        structured_model = self.model.with_structured_output(
+            Result, method="function_calling"
         )
+        chain = prompt | structured_model
 
         # Prepare inputs
         threat_model = state.threat_model
@@ -208,9 +190,7 @@ class ThreatModelDataAgent:
             }
 
             # Invoke the chain with retry logic
-            result = await ainvoke_with_retry(chain, chain_inputs)
-
-            result = result["responses"][0]
+            result = await chain.ainvoke(chain_inputs)
 
             # Update the running summary with the latest result
             previous_summary = result.summary

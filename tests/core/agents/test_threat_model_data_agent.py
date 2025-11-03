@@ -1,5 +1,4 @@
 from langchain_core.runnables import Runnable
-import core.agents.threat_model_data_agent as tmd
 from pydantic import BaseModel
 import copy
 import pytest
@@ -25,24 +24,16 @@ class DummyRunnable(Runnable):
     """Minimal runnable that mimics a trustcall extractor for tests."""
 
     def invoke(self, input, config=None):
-        return {
-            "responses": [
-                DummyResult(
-                    title="Mock Threat Model Title",
-                    summary="Mock summary of threat model analysis.",
-                )
-            ]
-        }
+        return DummyResult(
+            title="Mock Threat Model Title",
+            summary="Mock summary of threat model analysis.",
+        )
 
     async def ainvoke(self, input, config=None):
-        return {
-            "responses": [
-                DummyResult(
-                    title="Mock Threat Model Title",
-                    summary="Mock summary of threat model analysis.",
-                )
-            ]
-        }
+        return DummyResult(
+            title="Mock Threat Model Title",
+            summary="Mock summary of threat model analysis.",
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -97,12 +88,9 @@ def test_initialize_valid_data(mock_agent, valid_state):
 # -----------------------------------------------------------------------------
 # Unit Tests for `generate` (Async) Method
 # -----------------------------------------------------------------------------
-async def test_generate(mock_agent, mocker, valid_state, monkeypatch):
+async def test_generate(mock_agent, mocker, valid_state):
     """Test the generate method for correctly invoking the LLM chain."""
-    # Patch trustcall.create_extractor used inside ThreatModelDataAgent
-    monkeypatch.setattr(
-        tmd, "create_extractor", lambda *args, **kwargs: DummyRunnable()
-    )
+    mock_agent.model.with_structured_output.return_value = DummyRunnable()
 
     # Call the async generate method.
     new_state = await mock_agent.generate(valid_state)

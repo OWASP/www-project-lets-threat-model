@@ -2,7 +2,7 @@ import copy
 from typing import List
 import pytest
 from tempfile import TemporaryDirectory
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from pydantic import BaseModel, SecretStr
 
 from core.agents.repo_data_flow_agent import DataFlowAgent, GraphStateModel
@@ -19,6 +19,7 @@ from core.models.dtos.DataFlowReport import (
 from git import Repo as GitRepo
 from langgraph.graph import StateGraph, START, END
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import Runnable
 
 
 @pytest.fixture
@@ -54,8 +55,8 @@ def agent_config():
     # Provide any other fields that your code references
     mock_config.categorize_only = False
     mock_config.completion_threshold = 0.8
-    mock_config.context_window = 128000
-    mock_config.max_output_tokens = 16384
+    mock_config.context_window = 200000
+    mock_config.max_output_tokens = 10000
     mock_config.review_max_file_in_batch = 3
     mock_config.review_token_buffer = 0.5
     mock_config.categorize_max_file_in_batch = 30
@@ -152,11 +153,10 @@ async def test_categorize_files(data_flow_agent, mocker, initial_graph_state):
         should_not_review=[],
     )
 
-    # Create a mock chain that simulates the asynchronous LLM call.
-    patched_chain = AsyncMock(return_value=mock_result)
-
-    # Patch the model's with_structured_output method to return our mock chain.
-    data_flow_agent.categorize_model.with_structured_output.return_value = patched_chain
+    # Patch the model's with_structured_output method to return our dummy runnable.
+    data_flow_agent.categorize_model.with_structured_output.return_value = (
+        DummyCategorizationRunnable(mock_result)
+    )
 
     updated_state = await data_flow_agent.categorize_files(state)
     assert (
@@ -248,3 +248,15 @@ async def test_workflow_run(data_flow_agent, initial_graph_state):
     workflow = data_flow_agent.get_workflow()
     result_state = await workflow.ainvoke(initial_graph_state.dict())
     assert result_state
+class DummyCategorizationRunnable(Runnable):
+    def __init__(self, result):
+        self._result = result
+
+    def invoke(self, *args, **kwargs):
+        return self._result
+
+    async def ainvoke(self, *args, **kwargs):
+        return self._result
+
+    async def abatch(self, inputs, return_exceptions=False):
+        return [self._result for _ in inputs]

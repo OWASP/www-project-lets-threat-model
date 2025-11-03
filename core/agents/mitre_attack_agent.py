@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import json
 from langgraph.graph import StateGraph, START, END
@@ -8,13 +7,11 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     ChatPromptTemplate,
 )
-from core.agents.agent_tools import AgentHelper, ainvoke_with_retry
+from core.agents.agent_tools import AgentHelper
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List
 
 from core.models.dtos.MitreAttack import AgentAttack
-from trustcall import create_extractor
-
 logger = logging.getLogger(__name__)
 
 SYSTEM_MAP_PROMPT = """
@@ -84,44 +81,6 @@ class MitreAttackAgent:
 
         return state
 
-    async def _process_component(
-        self,
-        component: Dict[str, Any],
-        report: Dict[str, Any],
-        chain: Any,
-    ) -> List[AgentAttack]:
-        """Helper to process a single component asynchronously."""
-        try:
-            logger.debug(
-                "Processing component: %s",
-                component.get("name", "Unknown Component"),
-            )
-
-            result = await ainvoke_with_retry(
-                chain,
-                {
-                    "data_flow_report": json.dumps(report, sort_keys=True),
-                    "component": json.dumps(component, sort_keys=True),
-                },
-            )
-
-            attacks = result["responses"][0].attacks
-            logger.debug(
-                "Identified %d attacks in component: %s",
-                len(attacks),
-                component.get("name", "Unknown Component"),
-            )
-
-            return attacks
-
-        except Exception as e:
-            logger.exception(
-                "❌ Error analyzing component '%s': %s",
-                component.get("name", "Unknown Component"),
-                str(e),
-            )
-            return []
-
     def _log_attack_summary(self, attacks: List[AgentAttack]) -> None:
         """Log summary of identified MITRE ATT&CK techniques by tactic."""
         if not attacks:
@@ -186,35 +145,47 @@ class MitreAttackAgent:
                 )
             ),
         )
-        chain = prompt | create_extractor(
-            self.model,
-            tools=[Result],
-            tool_choice="Result",
+        structured_model = self.model.with_structured_output(
+            Result, method="function_calling"
         )
+        chain = prompt | structured_model
 
-        tasks = [
-            self._process_component(component, report, chain)
-            for key in (
-                "external_entities",
-                "processes",
-                "data_stores",
-                "trust_boundaries",
-                "data_flows",
-            )
-            for component in sorted(
-                report.get(key, []), key=lambda c: c.get("name", "")
-            )
+        components: list[Dict[str, Any]] = []
+        for key in (
+            "external_entities",
+            "processes",
+            "data_stores",
+            "trust_boundaries",
+            "data_flows",
+        ):
+            components.extend(sorted(report.get(key, []), key=lambda c: c.get("name", "")))
+
+        if not components:
+            logger.warning("No components found for MITRE ATT&CK analysis.")
+            state.attacks = []
+            return state
+
+        inputs = [
+            {
+                "data_flow_report": json.dumps(report, sort_keys=True),
+                "component": json.dumps(component, sort_keys=True),
+            }
+            for component in components
         ]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await chain.abatch(inputs, return_exceptions=True)
 
         attacks: List[AgentAttack] = []
         for res in results:
             if isinstance(res, Exception):
                 logger.error("❌ An error occurred in component analysis", exc_info=res)
                 continue
-            if isinstance(res, list):
-                attacks.extend(res)
+            try:
+                parsed = res if isinstance(res, Result) else Result.model_validate(res)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to parse MITRE analysis result: %s", exc)
+                continue
+            attacks.extend(parsed.attacks)
 
         logger.info(
             "✅ Finished MITRE ATT&CK analysis. Total attacks found: %d",

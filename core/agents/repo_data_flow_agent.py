@@ -2,7 +2,6 @@ import logging
 import os
 import fnmatch
 import json
-import asyncio
 from tempfile import TemporaryDirectory
 
 from typing import Set, List, Dict, Any
@@ -18,16 +17,10 @@ from langchain_core.prompts import (
     ChatPromptTemplate,
 )
 from langgraph.graph import StateGraph, START, END
-from core.agents.agent_tools import (
-    AgentHelper,
-    ainvoke_with_retry,
-    invoke_with_retry,
-)
+from core.agents.agent_tools import AgentHelper
 from core.agents.repo_data_flow_agent_config import RepoDataFlowAgentConfig
 from core.models.dtos.File import File
 from core.models.dtos.DataFlowReport import AgentDataFlowReport
-from trustcall import create_extractor
-
 
 logger = logging.getLogger(__name__)
 
@@ -337,18 +330,6 @@ class DataFlowAgent:
             could_review: List[File]
             should_not_review: List[File]
 
-        # Helper function to process a batch of file paths
-        async def _batch_categorize_files(batch: List[str]) -> CategorizationResult:
-            if not batch:
-                return CategorizationResult(
-                    should_review=[], could_review=[], should_not_review=[]
-                )
-            file_data = [{"file_path": fp} for fp in batch]
-            result = await ainvoke_with_retry(
-                chain, {"file_paths": json.dumps(file_data, sort_keys=True)}
-            )
-            return result["responses"][0]
-
         logger.info("🧠 => 🔄 Starting file categorization process with LLM...")
 
         # Consolidate 'should_review' + 'could_review' to feed to LLM
@@ -383,11 +364,10 @@ class DataFlowAgent:
         )
         prompt = ChatPromptTemplate.from_messages([system_prompt, user_prompt])
 
-        chain = prompt | create_extractor(
-            self.categorize_model,
-            tools=[CategorizationResult],
-            tool_choice="CategorizationResult",
+        structured_categorizer = self.categorize_model.with_structured_output(
+            CategorizationResult, method="function_calling"
         )
+        chain = prompt | structured_categorizer
 
         # We'll store the final results here before merging with 'state'
         new_state_sets = {
@@ -431,7 +411,7 @@ class DataFlowAgent:
         )
         max_tokens -= tool_overhead_tokens
 
-        tasks = []
+        tasks_inputs: list[dict[str, Any]] = []
         for fobj in files_list:
             path = fobj.file_path
             path_token_count = self.categorize_model.get_num_tokens(path)
@@ -439,13 +419,13 @@ class DataFlowAgent:
             if (len(current_batch) >= self.config.categorize_max_file_in_batch) or (
                 current_token_count + path_token_count > max_tokens
             ):
-                # Change: append (batch_index, copy_of_current_batch, coroutine)
-                tasks.append(
-                    (
-                        len(tasks),
-                        list(current_batch),
-                        _batch_categorize_files(list(current_batch)),
-                    )
+                tasks_inputs.append(
+                    {
+                        "file_paths": json.dumps(
+                            [{"file_path": fp} for fp in current_batch],
+                            sort_keys=True,
+                        )
+                    }
                 )
                 current_batch = []
                 current_token_count = 0
@@ -455,25 +435,35 @@ class DataFlowAgent:
 
         # Last batch if any
         if current_batch:
-            tasks.append(
-                (
-                    len(tasks),
-                    list(current_batch),
-                    _batch_categorize_files(list(current_batch)),
-                )
+            tasks_inputs.append(
+                {
+                    "file_paths": json.dumps(
+                        [{"file_path": fp} for fp in current_batch],
+                        sort_keys=True,
+                    )
+                }
             )
 
-        # Await all tasks: only gather the coroutine part
-        results = await asyncio.gather(*(t[2] for t in tasks), return_exceptions=True)
-        # Zip results with metadata and sort by index
-        indexed_results = [(t[0], t[1], r) for t, r in zip(tasks, results)]
-        indexed_results.sort(key=lambda x: x[0])
-        for _, _, r in indexed_results:
+        if not tasks_inputs:
+            logger.info("No batches to categorize after budgeting.")
+            return state
+
+        results = await chain.abatch(tasks_inputs, return_exceptions=True)
+
+        for r in results:
             if isinstance(r, Exception):
                 logger.error("❌ Error from categorization batch: %s", r)
                 continue
-            if isinstance(r, CategorizationResult):
-                _merge_categorization_results(r)
+            try:
+                categorization = (
+                    r
+                    if isinstance(r, CategorizationResult)
+                    else CategorizationResult.model_validate(r)
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to parse categorization result: %s", exc)
+                continue
+            _merge_categorization_results(categorization)
         # Handle any uncategorized or fake files
         categorized_all = (
             new_state_sets["should_review"]
@@ -531,11 +521,13 @@ class DataFlowAgent:
 
         prompt = ChatPromptTemplate.from_messages([system_template, user_template])
 
-        chain = prompt | create_extractor(
-            self.review_model,
-            tools=[AgentDataFlowReport],
-            tool_choice="AgentDataFlowReport",
+        class ReviewResult(BaseModel):
+            data_flow_report: Dict[str, Any]
+
+        structured_model = self.review_model.with_structured_output(
+            ReviewResult, method="function_calling"
         )
+        chain = prompt | structured_model
 
         # We'll process until no more files to review
         while should_review:
@@ -608,14 +600,21 @@ class DataFlowAgent:
                 attempt_processed_files = processed_files
                 while attempt_batch:
                     try:
-                        llm_result = invoke_with_retry(
-                            chain,
+                        llm_result = chain.invoke(
                             {
                                 "file_data": json.dumps(attempt_batch, sort_keys=True),
                                 "data_flow_report": report_json,
                             },
                         )
-                        report = llm_result["responses"][0]
+                        review_result = (
+                            llm_result
+                            if isinstance(llm_result, ReviewResult)
+                            else ReviewResult.model_validate(llm_result)
+                        )
+                        restored_report = self.agent_helper.convert_ids_to_uuids(
+                            review_result.data_flow_report
+                        )
+                        report = AgentDataFlowReport.model_validate(restored_report)
                         logger.info(
                             "Processed %d/%d files successfully.",
                             len(attempt_processed_files),
@@ -651,7 +650,7 @@ class DataFlowAgent:
                             for file in attempt_processed_files:
                                 could_not_review.add(
                                     File(
-                                        file_path=file["filepath"], justification=str(e)
+                                        file_path=file.file_path, justification=str(e)
                                     )
                                 )
                             break

@@ -10,10 +10,8 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     ChatPromptTemplate,
 )
-from core.agents.agent_tools import AgentHelper, ainvoke_with_retry
+from core.agents.agent_tools import AgentHelper
 from langgraph.graph import StateGraph, START, END
-from trustcall import create_extractor
-
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +59,24 @@ class MergeDataFlowAgent:
         """Prepare state before we start the rest of the workflow."""
         # Convert data flow reports
         data_flow_reports = state.data_flow_reports
+        if not data_flow_reports:
+            logger.info("No data flow reports provided; skipping merge workflow.")
+            state.merged_data_flow_report = {}
+            state.justification = "No data flow reports provided."
+            return state
+
         numbered_reports = [
             self.agent_helper.convert_uuids_to_ids(report)
             for report in data_flow_reports
         ]
         state.data_flow_reports = numbered_reports
+
+        if len(numbered_reports) == 1:
+            logger.info("Single data flow report provided; returning it unchanged.")
+            state.merged_data_flow_report = numbered_reports[0]
+            state.justification = (
+                "Single data flow report provided; merge step skipped."
+            )
 
         return state
 
@@ -89,11 +100,11 @@ class MergeDataFlowAgent:
             """Structured response combining merged data flow report and justification."""
 
             data_flow_report: Dict[str, Any] = Field(
-                ...,
+                default_factory=dict,
                 description="The resulting merged data flow report combining multiple individual reports into a single representation.",
             )
             justification: str = Field(
-                ...,
+                default="",
                 description="Explanation of how and why the data flow reports were merged.",
             )
 
@@ -106,12 +117,10 @@ class MergeDataFlowAgent:
         )
         prompt = ChatPromptTemplate.from_messages([system_prompt, user_prompt])
 
-        # Build chain with structured output
-        chain = prompt | create_extractor(
-            self.model,
-            tools=[Result],
-            tool_choice="Result",
+        structured_model = self.model.with_structured_output(
+            Result, method="function_calling"
         )
+        chain = prompt | structured_model
 
         # Prepare inputs
         reports = state.data_flow_reports
@@ -125,8 +134,7 @@ class MergeDataFlowAgent:
         }
 
         # Invoke the chain with retry logic
-        result = await ainvoke_with_retry(chain, chain_inputs)
-        result = result["responses"][0]
+        result = await chain.ainvoke(chain_inputs)
 
         state.merged_data_flow_report = result.data_flow_report
         state.justification = result.justification

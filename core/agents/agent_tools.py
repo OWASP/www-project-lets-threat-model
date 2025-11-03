@@ -1,21 +1,18 @@
 import logging
-from typing import Any
 import uuid
+from typing import Any
+
 from langchain.chat_models.base import BaseChatModel
-from tenacity import (
-    retry,
-    retry_if_exception,
-    wait_exponential,
-    stop_after_attempt,
-    before_sleep_log,
-)
 from langchain_core.runnables.base import Runnable
 from langchain_core.runnables.utils import Input
 
-from core.utils.llm_concurrency import llm_concurrency_guard
-
-
 logger = logging.getLogger(__name__)
+
+DEFAULT_RETRY_PARAMS = {
+    "stop_after_attempt": 5,
+    "wait_exponential_jitter": True,
+    "exponential_jitter_params": {"initial": 2.0, "max": 60.0},
+}
 
 
 class AgentHelper:
@@ -205,46 +202,3 @@ def get_model_name(model: BaseChatModel):
         if hasattr(model, attr):
             return getattr(model, attr)
     return "Unknown Model"
-
-
-def is_rate_limit_error(exception: BaseException) -> bool:
-    # Example for HTTP errors:
-    if (
-        hasattr(exception, "status_code")
-        and getattr(exception, "status_code", None) == 429
-    ):
-        return True
-    # OR parse error message or code if it's embedded in exception.args
-    return False
-
-
-# General async retry wrapper for any chain.ainvoke call
-@retry(
-    retry=retry_if_exception(is_rate_limit_error),
-    wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
-    stop=stop_after_attempt(5),  # Stop after 5 tries
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,  # Raise exception after all retries fail
-)
-async def ainvoke_with_retry(chain: Runnable, input: Input):
-    # Optionally serialize inputs (if needed)
-    # inputs = {k: json.dumps(v) for k, v in inputs.items()}  # Uncomment if your inputs need serialization
-
-    logger.debug(f"Invoking chain with inputs: {input}")
-    async with llm_concurrency_guard():
-        return await chain.ainvoke(input)
-
-
-@retry(
-    retry=retry_if_exception(is_rate_limit_error),
-    wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
-    stop=stop_after_attempt(5),  # Stop after 5 attempts
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,  # Raise the exception if it keeps failing
-)
-def invoke_with_retry(chain: Runnable, input: Input):
-    """
-    Wrapper function to retry chain.invoke() on rate limit (HTTP 429) errors.
-    """
-    logger.debug(f"Invoking chain synchronously with inputs: {input}")
-    return chain.invoke(input)
