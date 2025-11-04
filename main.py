@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import json
 import logging
 import os
 from uuid import UUID, uuid4
@@ -9,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import SecretStr
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, Dict, Any
 from sarif_om import SarifLog
 
 # Import Models and Services
@@ -24,8 +23,7 @@ from core.services.sarif_services import (
 from core.services.threat_model_config import ThreatModelConfig
 from core.services.threat_model_services import generate_threat_model
 from core.services.reports import generate_threat_model_report
-from core.utils.llm_concurrency import set_concurrency_limit
-from core.agents.chat_model_manager import set_provider_limits
+from core.agents.chat_model_manager import set_rate_limits
 
 
 # Get LOG_LEVEL from env or default to INFO
@@ -39,6 +37,36 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _masked_secret(secret: SecretStr) -> str:
+    """
+    Return a masked representation of a secret suitable for logging.
+    """
+    if not isinstance(secret, SecretStr):
+        return "<redacted>"
+    raw = secret.get_secret_value()
+    if not raw:
+        return ""
+    if len(raw) <= 4:
+        return "*" * len(raw)
+    return f"{raw[:2]}{'*' * (len(raw) - 4)}{raw[-2:]}"
+
+
+def _mask_threat_model_config(config: "ThreatModelConfig") -> Dict[str, Any]:
+    """
+    Produce a logging-safe representation of ThreatModelConfig with secrets masked.
+    """
+    config_dict = config.model_dump(mode="json")
+    for field in ("pat", "api_key"):
+        if field in config_dict:
+            secret = getattr(config, field, None)
+            config_dict[field] = (
+                _masked_secret(secret)
+                if isinstance(secret, SecretStr)
+                else "<redacted>"
+            )
+    return config_dict
 
 
 def load_yaml_config(file_path: str) -> dict:
@@ -119,19 +147,9 @@ def build_threat_model_config(
         "generate_threats": True,
         "generate_data_flow_reports": True,
         "data_flow_report_strategy": ThreatModelConfig.STRATEGY_BOTH,
-        "anthropic_concurrency_limit": 2,
-        "anthropic_requests_per_minute": 50.0,
-        "anthropic_check_every_n_seconds": 0.5,
-        "anthropic_max_bucket_size": 5,
-        "anthropic_per_request_token_cap": 10000,
-        "anthropic_model_token_caps": {
-            "default": 10000,
-            "claude-4.1-sonnet": 8000,
-            "claude-4.1-opus": 8000,
-            "claude-3-5-sonnet": 8000,
-            "claude-3-sonnet": 8000,
-            "claude-3-5-opus": 8000,
-        },
+        "rate_limit_requests_per_minute": 50.0,
+        "rate_limit_check_every_n_seconds": 0.5,
+        "rate_limit_max_bucket_size": 5,
     }
 
     # Fill in any missing keys with defaults
@@ -148,15 +166,11 @@ def build_threat_model_config(
 
     config = ThreatModelConfig(**config_settings)
     config.add_exclude_patterns(exclude_patterns)
-    set_provider_limits(
-        "anthropic",
-        requests_per_minute=config.anthropic_requests_per_minute,
-        check_every_n_seconds=config.anthropic_check_every_n_seconds,
-        max_bucket_size=config.anthropic_max_bucket_size,
-        max_tokens=config.anthropic_per_request_token_cap,
-        model_caps=config.anthropic_model_token_caps,
+    set_rate_limits(
+        requests_per_minute=config.rate_limit_requests_per_minute,
+        check_every_n_seconds=config.rate_limit_check_every_n_seconds,
+        max_bucket_size=config.rate_limit_max_bucket_size,
     )
-    set_concurrency_limit(config.anthropic_concurrency_limit)
     return config
 
 
@@ -181,10 +195,13 @@ async def main(
             asset, repositories, threat_model_config
         )
 
-        logger.debug(
-            f"⚙️ Threat Model Configuration:\n{threat_model_config.model_dump_json(indent=4)}"
-            f"\n\n📝 Generated Threat Model:\n{threat_model.model_dump_json(indent=4)}"
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            masked_config = _mask_threat_model_config(threat_model_config)
+            logger.debug(
+                "⚙️ Threat Model Configuration:\n%s\n\n📝 Generated Threat Model:\n%s",
+                json.dumps(masked_config, indent=4),
+                threat_model.model_dump_json(indent=4),
+            )
 
         # Generate and save the report
         markdown_report = generate_threat_model_report(

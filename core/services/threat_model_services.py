@@ -23,12 +23,70 @@ from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional, Tuple, List
 import asyncio
 from git import Repo as GitRepo
+from urllib.parse import urlparse, urlunparse, quote
 
 
 from core.services.threat_model_config import ThreatModelConfig
 
 
 logger = logging.getLogger(__name__)
+ALLOWED_GIT_HTTP_HOSTS = {"github.com", "www.github.com"}
+
+
+def _sanitize_repository_url(repo_url: str) -> str:
+    """
+    Ensure repository URL uses HTTPS and targets an allowed host.
+    """
+    if not repo_url:
+        raise ValueError("Repository URL cannot be empty.")
+
+    if repo_url.startswith("git@"):
+        # SSH URLs are left untouched; credentials are not injected.
+        return repo_url
+
+    if not repo_url.startswith(("http://", "https://")):
+        repo_url = f"https://{repo_url.lstrip('/')}"
+
+    parsed = urlparse(repo_url)
+    if parsed.scheme != "https":
+        raise ValueError("Only HTTPS Git repository URLs are supported.")
+
+    if parsed.username or parsed.password:
+        raise ValueError("Repository URL must not embed credentials.")
+
+    host = parsed.netloc.lower()
+    if host not in ALLOWED_GIT_HTTP_HOSTS:
+        raise ValueError(
+            f"Repository host '{host}' is not allowed. Allowed hosts: {sorted(ALLOWED_GIT_HTTP_HOSTS)}"
+        )
+
+    normalized = parsed._replace(netloc=host)
+    return urlunparse(normalized)
+
+
+def _build_authenticated_repo_url(
+    sanitized_url: str, username: str, pat: SecretStr
+) -> str:
+    """
+    Construct an authenticated URL, ensuring credentials are only injected for allowed hosts.
+    """
+    if sanitized_url.startswith("git@"):
+        # SSH clone; no credentials injected.
+        return sanitized_url
+
+    parsed = urlparse(sanitized_url)
+
+    if parsed.netloc not in ALLOWED_GIT_HTTP_HOSTS:
+        raise ValueError("Authenticated cloning only supported for GitHub HTTPS URLs.")
+
+    if not username or not pat or not pat.get_secret_value():
+        return sanitized_url
+
+    encoded_username = quote(username, safe="")
+    encoded_pat = quote(pat.get_secret_value(), safe="")
+    auth_netloc = f"{encoded_username}:{encoded_pat}@{parsed.netloc}"
+
+    return urlunparse(parsed._replace(netloc=auth_netloc))
 
 
 async def generate_threat_model(
@@ -226,14 +284,17 @@ def clone_repository(
 ) -> GitRepo:
     """Clone the repository into a temporary directory."""
     try:
+        sanitized_url = _sanitize_repository_url(repo_url)
+
         logger.info(
             "🛠️ Initiating repository clone: %s → %s",
-            repo_url,
+            sanitized_url,
             temp_dir,
         )
 
-        # Use pat.get_secret_value() to retrieve the actual secret string
-        auth_repo_url = f"https://{username}:{pat.get_secret_value()}@{repo_url}"
+        auth_repo_url = _build_authenticated_repo_url(
+            sanitized_url, username, pat
+        )
 
         repo = GitRepo.clone_from(auth_repo_url, temp_dir)
         branch = repo.head.reference.name
@@ -241,7 +302,7 @@ def clone_repository(
 
         logger.info(
             "✅ Successfully cloned repository: %s (Branch: %s | Commit: %s)",
-            repo_url,
+            sanitized_url,
             branch,
             commit,
         )

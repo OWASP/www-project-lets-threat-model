@@ -1,6 +1,6 @@
 from openai import base_url
 from pydantic import Field, SecretStr
-from typing import Literal, ClassVar, Dict
+from typing import Literal, ClassVar
 
 from core.agents.repo_data_flow_agent_config import RepoDataFlowAgentConfig
 
@@ -56,38 +56,18 @@ class ThreatModelConfig(RepoDataFlowAgentConfig):
         description="Whether to generate data flow reports",
     )
 
-    anthropic_requests_per_minute: float = Field(
+    rate_limit_requests_per_minute: float = Field(
         default=50.0,
-        description="Anthropic default request limit (requests per minute). Override to match your account quota.",
+        description="Rate limiter default request limit (requests per minute).",
     )
-    anthropic_check_every_n_seconds: float = Field(
+    rate_limit_check_every_n_seconds: float = Field(
         default=0.5,
-        description="Interval for Anthropic rate limiter to replenish its token bucket.",
+        description="Interval for the rate limiter to replenish its token bucket.",
     )
-    anthropic_max_bucket_size: int = Field(
+    rate_limit_max_bucket_size: int = Field(
         default=5,
-        description="Burst size for Anthropic rate limiter (maximum queued requests).",
+        description="Burst size for the rate limiter (maximum queued requests).",
     )
-    anthropic_per_request_token_cap: int = Field(
-        default=10000,
-        description="Per-request max tokens to request from Anthropic models. Adjust to your account's allowance.",
-    )
-    anthropic_model_token_caps: Dict[str, int] = Field(
-        default_factory=lambda: {
-            "default": 10000,
-            "claude-4.1-sonnet": 8000,
-            "claude-4.1-opus": 8000,
-            "claude-3-5-sonnet": 8000,
-            "claude-3-sonnet": 8000,
-            "claude-3-5-opus": 8000,
-        },
-        description="Per-model token caps for Anthropic models. Keys are prefixes or full model IDs; 'default' applies when no prefix matches.",
-    )
-    anthropic_concurrency_limit: int = Field(
-        default=2,
-        description="Maximum number of concurrent Anthropic LLM requests allowed.",
-    )
-
     STRATEGY_PER_REPOSITORY: ClassVar[str] = "per-repository"
     STRATEGY_COMBINED: ClassVar[str] = "combined"
     STRATEGY_BOTH: ClassVar[str] = "both"

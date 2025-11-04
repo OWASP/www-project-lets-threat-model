@@ -100,7 +100,8 @@ After running the container, reports will be generated only if you specify the c
 ### **2. Install Dependencies**
 Ensure you have Python **3.8+** installed, then install dependencies:
 ```sh
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
 
 ---
@@ -289,7 +290,6 @@ source venv/bin/activate  # On macOS/Linux
 venv\Scripts\activate  # On Windows
 pip install -r requirements.txt
 ```
-
 ---
 
 ## 🏗 Contributing

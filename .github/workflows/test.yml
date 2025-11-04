@@ -27,11 +27,11 @@ jobs:
     steps:
       # Step 1: Checkout code
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
       # Step 2: Set up Python
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: '3.12'  # Match your local version
 
@@ -39,9 +39,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+          
       # Step 4: Run pytest (will use pytest.ini automatically)
       - name: Run pytest
         run: |

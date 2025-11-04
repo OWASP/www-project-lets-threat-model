@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 
@@ -14,16 +13,9 @@ from langchain_core.prompts import (
     ChatPromptTemplate,
     AIMessagePromptTemplate,
 )
-from langchain_core.output_parsers import JsonOutputParser
 from core.models.dtos.Threat import AgentThreat
-from core.agents.agent_tools import (
-    AgentHelper,
-    ainvoke_with_retry,
-    invoke_with_retry,
-)
+from core.agents.agent_tools import AgentHelper
 from langgraph.graph import StateGraph, START, END
-from trustcall import create_extractor
-
 logger = logging.getLogger(__name__)
 
 
@@ -205,35 +197,50 @@ class ThreatModelAgent:
 
         prompt = ChatPromptTemplate.from_messages([system_prompt, user_prompt])
 
-        chain = prompt | create_extractor(
-            self.model, tools=[Result], tool_choice="Result"
+        structured_model = self.model.with_structured_output(
+            Result, method="function_calling"
         )
+        chain = prompt | structured_model
 
         asset = state.asset
         report = state.data_flow_report
 
-        tasks = [
-            self._process_component(component, asset, report, chain)
-            for key in (
-                "external_entities",
-                "processes",
-                "data_stores",
-                "trust_boundaries",
-            )
-            for component in sorted(
-                report.get(key, []), key=lambda c: c.get("name", "")
-            )
+        components: list[Dict[str, Any]] = []
+        for key in (
+            "external_entities",
+            "processes",
+            "data_stores",
+            "trust_boundaries",
+        ):
+            components.extend(sorted(report.get(key, []), key=lambda c: c.get("name", "")))
+
+        if not components:
+            logger.warning("No components found for threat analysis.")
+            state.threats = []
+            return state
+
+        inputs = [
+            {
+                "asset": json.dumps(asset, sort_keys=True),
+                "data_flow_report": json.dumps(report, sort_keys=True),
+                "component": json.dumps(component, sort_keys=True),
+            }
+            for component in components
         ]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await chain.abatch(inputs, return_exceptions=True)
 
         all_threats: List[Dict[str, Any]] = []
         for res in results:
             if isinstance(res, Exception):
                 logger.error("❌ An error occurred in component analysis", exc_info=res)
                 continue
-            if isinstance(res, list):
-                all_threats.extend(res)
+            try:
+                parsed = res if isinstance(res, Result) else Result.model_validate(res)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to parse threat analysis result: %s", exc)
+                continue
+            all_threats.extend(parsed.threats)
 
         logger.info(
             "✅ Finished threat model analysis. Total threats found: %d",
@@ -243,46 +250,6 @@ class ThreatModelAgent:
 
         state.threats = all_threats
         return state
-
-    async def _process_component(
-        self,
-        component_data: Dict[str, Any],
-        asset: Dict[str, Any],
-        report: Dict[str, Any],
-        chain: Any,
-    ) -> List[Dict[str, Any]]:
-        """Helper to process a single component asynchronously."""
-        try:
-            logger.debug(
-                "Processing component: %s",
-                component_data.get("name", "Unknown Component"),
-            )
-
-            result = await ainvoke_with_retry(
-                chain,
-                {
-                    "asset": json.dumps(asset, sort_keys=True),
-                    "data_flow_report": json.dumps(report, sort_keys=True),
-                    "component": json.dumps(component_data, sort_keys=True),
-                },
-            )
-
-            threats = result["responses"][0].threats
-            logger.debug(
-                "Identified %d threats in component: %s",
-                len(threats),
-                component_data.get("name", "Unknown Component"),
-            )
-
-            return threats
-
-        except Exception as e:
-            logger.exception(
-                "❌ Error analyzing component '%s': %s",
-                component_data.get("name", "Unknown Component"),
-                str(e),
-            )
-            return []
 
     # def consolidate_threats(
     #     self, state: ThreatGraphStateModel

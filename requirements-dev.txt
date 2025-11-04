@@ -4,3 +4,4 @@ pytest-mock==3.14.0
 pre-commit==4.2.0
 jsonschema==4.23.0
 sentence-transformers==5.0.0
+torch==2.9.0
