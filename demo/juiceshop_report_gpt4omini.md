@@ -6,7 +6,7 @@ The OWASP Juice Shop is a deliberately insecure web application developed for se
 
 ## Asset Information
 - **Name:** OWASP Juice Shop
-- **Description:** OWASP Juice Shop is a deliberately insecure web application developed for security training, awareness, and testing. It is maintained by the Open Web Application Security Project (OWASP) and is widely used for ethical hacking practice, penetration testing, and learning web security vulnerabilities.
+- **Description:** OWASP Juice Shop is a deliberately insecure web application developed for security training, awareness, and testing. It is maintained by the Open Worldwide Application Security Project (OWASP) and is widely used for ethical hacking practice, penetration testing, and learning web security vulnerabilities.
 - **Internet Facing:** Yes
 - **Authentication Type:** PASSWORD
 - **Data Classification:** CONFIDENTIAL
